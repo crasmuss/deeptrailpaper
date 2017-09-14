@@ -48,11 +48,26 @@
 \newcommand{\ChiSquared}{\chi^{2}}
 \newcommand{\TrailRegionRight}{\TrailRegion_{L}}
 \newcommand{\TrailRegionLeft}{\TrailRegion_{R}}
-\newcommand{\TrailAnnotatedSet}{\mathcal{S}_{trail}}
-\newcommand{\TrailBadAnnotatedSet}{\mathcal{S}_{bad\_trail}}
+% all of the T sets are train/val
+\newcommand{\TrailAnnotatedSet}{\mathtt{trainval}_{trail}}
+\newcommand{\TrailBadAnnotatedSet}{\mathtt{trainval}_{bad\_trail}}
 %\newcommand{\TrailSeqAnnotatedSet}{\mathcal{A}^{\ast}_{trail}}
-\newcommand{\TrailSeqAnnotatedSet}{\mathcal{S}_{trail\_sequence}}
-\newcommand{\TreeAnnotatedSet}{\mathcal{S}_{tree}}
+\newcommand{\TrailSeqAnnotatedSet}{\mathtt{trainval}_{trail-30}}
+\newcommand{\TreeAnnotatedSet}{\mathtt{trainval}_{tree}}
+
+\newcommand{\TrailQualityNet}{Darknet-19}
+%\newcommand{\Trail1DMaskNet}{Darknet-19}
+%\newcommand{\Trail2DMaskNet}{Darknet-19}
+%\newcommand{\TrailRegressionNet}{Darknet-19}
+
+% all of the TE sets are test
+\newcommand{\TrailTestAnnotatedSet}{\mathtt{test}_{trail}}
+\newcommand{\TrailTestBadAnnotatedSet}{\mathtt{test}_{bad\_trail}}
+
+\newcommand{\TrailNearDepth}{d_{near}}
+\newcommand{\TrailFarDepth}{d_{far}}
+\newcommand{\TrailNearLine}{y_{near}}
+\newcommand{\TrailFarLine}{y_{far}}
 
 \title{\LARGE \bf
 Deep Learning for Trail Scene Understanding
@@ -126,7 +141,7 @@ objects that might be found along trails such as signs, hazards like rocks and l
 \captionsetup[subfigure]{labelformat=empty}
 \subfloat[]{%
   \centering{\includegraphics[width=1.0\columnwidth]{000738.jpg}}}\\
-\caption{Omnidirectional forest trail image captured from robot}
+\caption{Omnidirectional forest trail image captured from robot.}
 \label{fig:raw_trail}
 \end{figure}
 
@@ -163,9 +178,17 @@ nearby obstacles jointly \cite{<FSR2012>}.
   albeit in a different fashion) rather than use hand-designed
   objective function.  also want to say something about importance of tracking}
 
-\comment{while we don't attempt to recognize what kind of scene the robot is looking at
-  from some large set, we do think that it's important to know if a segmentable trail is present or not in the image.  so we talk about classifying the image in this way as a pre-processing step.}
+\comment{while we don't attempt to recognize what kind of scene the
+  robot is looking at from some large set, we do think that it's
+  important to know if a segmentable trail is present or not in the
+  image.  so we talk about classifying the image in this way as a
+  pre-processing step.}
 
+The robot needs to know if the trail image is bad so that at a minimum
+it can switch to a different driving mode, such as stopping and
+searching to acquire (or reacquire) the trail.  A secondary goal is to
+have a sliding confidence score which guides the robot to slow down or
+speed up, or to add or drop cues/sensors as necessary.
 
 % $\TrailRegion$
 
@@ -403,26 +426,18 @@ variations in trail shape and robot maneuvers.
 
 For annotation purposes, the region of the trail just in front of the
 robot is approximated by a quadrilateral constrained to have its near
-and far edges at fixed distances $d_{near}, d_{far}$ (here about 1 m and
+and far edges at fixed distances $\TrailNearDepth, \TrailFarDepth$ (here about 1 m and
 2.5 m) along the nominal ground plane in front of the robot.  The
 image projection of this quadrilateral, exemplified by the green shape
 in Fig.~\ref{fig:trail_explainer}, thus has horizontal bottom and top
-edges in the trail ROI at $y_{near}$ and $y_{far}$ (ignoring radial
+edges in the trail ROI at $\TrailNearLine$ and $\TrailFarLine$ (ignoring radial
 distortion from the lens).  These lines are shown in blue and red
 respectively in Fig.~\ref{fig:nearfar_explainer}.  The intersections
-of the left $L$ and right $R$ trail boundaries with $y_{near}$ and
-$y_{far}$ define the trail quadrilateral with 4 variables:
+of the left $L$ and right $R$ trail boundaries with $\TrailNearLine$ and
+$\TrailFarLine$ define the trail quadrilateral with 4 variables:
 $(x^{L}_{far}, x^{R}_{far}, x^{L}_{near}, x^{R}_{near})$.
 
-Over this short range of depths, our linear approximation to the trail
-shape and an assumption that the ground is planar are reasonable.
-Thus, we can invert the camera projection
-and obtain the trail region in vehicle coordinates.  These variables
-then allow the calculation of variables relevant to motion planning
-such as trail width, lateral offet, and heading.  Trail curvature must
-be estimated with temporal filtering.
-
-Figs.~\ref{fig:nearfar_explainer}(a-f) are several samples of the
+Figs.~\ref{fig:nearfar_explainer}(a-f) show several samples of ground truth for the
 quadrilateral trail region approximation in different terrain and
 lighting conditions.  Figs.~\ref{fig:nearfar_explainer}(g-l) are
 examples of images which were annotated as \textit{bad trail}, or not
@@ -432,12 +447,20 @@ approaching the trailhead, but there is no trail region yet between
 $y_{near}$ and $y_{far}$.  In Fig.~\ref{fig:nearfar_explainer}(h) the
 robot is pointing off the trail and only sees an empty field.  In
 Fig.~\ref{fig:nearfar_explainer}(i) the left side of the trail is not
-in the trail ROI because of the heading and width of the trail, and in
+completely in the trail ROI because of the robot orientation and width of the trail, and similarly in
 Fig.~\ref{fig:nearfar_explainer}(j) only a portion of the trail is
 visible at left.  In Figs.~\ref{fig:nearfar_explainer}(k) and (l) the
 trail is completely visible, but in the former case it curves so
 sharply that it does not intersect $y_{far}$, and in the latter case
-the branching make the quadrilateral approximation especially poor.
+the branching makes a quadrilateral approximation too poor.
+
+For the most part, over the chosen depth range our linear approximation to the trail
+shape and an assumption that the ground is planar are reasonable.
+Thus, we can invert the camera projection
+and obtain the trail region in vehicle coordinates.  These variables
+then allow the calculation of variables relevant to motion planning
+such as trail width, lateral offet, and heading.  Trail curvature, however, must
+be estimated with temporal filtering.
 
 
 %\comment{This may occur because the trail's width and lateral offset caused
@@ -515,9 +538,7 @@ the branching make the quadrilateral approximation especially poor.
  \hspace{0.001\in}
 \subfloat[]{%
   \includegraphics[width=0.32\columnwidth]{000773_trail_roi_bad.png}}}
-\caption{(a-f) Sample of trail ROIs with ground truth trail region quadrilaterals and near/far
-  intersection lines overlaid.  Image (a) is from Fig.~\ref{fig:raw_trail}.  (g-l) Sample of trail ROIs from
-  \textit{bad trail} test set.  In these images, a ``proper'' trail region is not completely visible within the depth range indicated by the blue and red lines}
+\caption{(a-f) Sample of trail ROIs with overlays of ground truth trail region quadrilaterals in green and $\TrailNearLine / \TrailFarLine$ lines in blue/red.  The source of image (a) is the same as Figs.~\ref{fig:raw_trail} and \ref{fig:trail_explainer}.  (g-l) Sample of trail ROIs from $\TrailBadAnnotatedSet$.  In these images, a \textit{good} trail region either is not completely visible within the image or does not extend over the entire search depth range.}
 \label{fig:nearfar_explainer}
 \end{figure}
 
@@ -578,13 +599,13 @@ pixels)--this is usually due to distance.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-\subsection{Train/test}
+\subsection{Training/validation}
 
 % 82,341 total
 % 4,634 bad
 % 77,707 good
 
-To create a train/test dataset, images were selected from multiple
+To create a train/validation dataset, images were selected from multiple
 robot runs along a combined hiking/mountain-biking trail in the
 eastern U.S. over three days in different summer months and years.
 This trail forms a 1.7 km-long loop through varied terrain including
@@ -598,12 +619,15 @@ robot speed was typically between 0.75 m/s (autonomous) and 1.5 m/s
 repositioned to begin a new segment.  Just over 4,600 of these images
 were marked as \textit{bad trails} as defined above.
 
-\subsubsection{Trail shape} From among the nearly 78,000 ``good''
+\subsubsection{Trail shape} From among the nearly 78,000 \textit{good}
 images, a subset of about 2.5\% were selected for quadrilateral trail
 shape annotation, randomly but with a separation of at least 40-50
 frames to minimize overly similar images.  In all, a set
 $\TrailAnnotatedSet$ of 2,018 images containing the complete trail
-region were annotated.  To facilitate tracking evaluation and learning
+region were annotated.  A subset $\TrailBadAnnotatedSet$ of 2,711 bad
+trail images were randomly selected for training/validation.
+
+To facilitate tracking evaluation and learning
 dynamics, each annotated image $I_{t} \in \TrailAnnotatedSet$ at time
 $t$ (using frames as units of time) was supplemented with trail
 annotations for the preceding 30 frames (roughly 3 seconds).  Only
@@ -618,25 +642,30 @@ annotated image sequences will be called $\TrailSeqAnnotatedSet$
 
 \subsubsection{Trees} A 650-image subset $\TreeAnnotatedSet \subset
 \TrailAnnotatedSet$ contains at least one tree according to the
-filtering criteria previously described..  1,440 trees were
+filtering criteria previously described.  1,440 trees were
 annotated in this set.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-\subsection{Validation}
+\subsection{Testing}
 
-We also created a validation set taken in late winter which consisted
-of part of the same trail loop, plus one run each on a paved campus
+We also created a test set taken in late winter which consisted
+of part of the same train/validation trail loop, plus one run each on a paved campus
 path and a gravel path at a suburban park.  Visual conditions were
 significantly different, with color contrast significantly reduced.
 See \comment{winter vs. summer pics} for a comparison of the same
 %\comment{Fig.~\ref{fig:wintersummer}} for a comparison of the same
-section of trail at different times of year.
+section of trail at different times of year.  The total number of
+logged images was 13,179, of which 1,302 were marked as \textit{bad
+  trails}.
 
-The total number of logged images was 13,179, of which 1,302 were
-marked as \textit{bad}.  Trail shapes were annotated for 553 images
-(at 20-frame intervals from the captured sequences), and 256
-representative bad trail images were selected.
+\subsubsection{Trail shape} Shape annotations were made for about 5\% of good trail images (using 20-frame intervals
+from the captured sequences), resulting in a set
+$\TrailTestAnnotatedSet$ of 553 images.  Similarly, a
+representative set $\TrailTestBadAnnotatedSet$ of 256 bad trail
+images was selected.
+
+\subsubsection{Trees} \comment{something to say here?}
 
 
 %\comment{size of set?
@@ -656,24 +685,22 @@ representative bad trail images were selected.
 %As mentioned in the previous section, not all images contain a
 %view of the trail that permits it to be fully segmented.
 
-The robot needs to know if the trail image is bad so that at a minimum
-it can switch to a different driving mode, such as stopping and
-searching to acquire (or reacquire) the trail.  A secondary goal is to
-have a sliding confidence score which guides the robot to slow down or
-speed up, or to add or drop cues/sensors as necessary.
-
 In \cite{<FSR2012>}, bad trail classification was performed by simply
 thresholding the likelihood of the trail tracker state, as this
 represents the ``quality'' of the current trail estimate.  This
 estimate is nominally optimal, so if the tracker cannot find a
-high-valued state, then the system infers that there is no clear trail
+high-valued state, the system may infer that there is no clear trail
 in the image.  Here, we use the labeled data to train a \textit{trail
   quality} neural network 2-category classifier to recognize bad trail
-images.  Specifically, the color trail ROI is resized to $160 \times
-80$ and input to a Darknet-19 convolutional neural network
+images.
+
+Specifically, the color trail ROI is resized to $160 \times 80$ and
+input to a resized Darknet-19 convolutional neural network
 \cite{<YOLO9000>}, which is used as a feature-finding front end.  This
-is followed by several fully-connected layers \comment{number of
-  layers, number of units} before a softmax output layer.
+module terminates with 1,024 $5 \times 2$ feature maps.  This is
+followed by a $1 \times 1$ convolutional layer with 2 filters and linear activations.  Each
+of the 2 resulting feature maps is average-pooled, then a softmax
+function is applied to obtain the final 2-unit output layer.
 
 %When
 %this likelihood drops below a threshold, the robot stops and a ladar
@@ -688,7 +715,7 @@ is followed by several fully-connected layers \comment{number of
 \subsection{Segmentation}
 
 If the quality network classifies an image as containing a good trail,
-the robot then tries to estimate the best fit trail quadrilateral
+the robot then tries to estimate the best-fit trail quadrilateral
 $(\hat{x}^{L}_{far}, \hat{x}^{R}_{far}, \hat{x}^{L}_{near},
 \hat{x}^{R}_{near})$ using a \textit{trail shape} network.  Directly
 regressing a bounding box (i.e., outputting coordinates) from an image
@@ -723,6 +750,15 @@ the most likely joint location as the brightest pixel location.  We
 want to generalize this to learn \textit{masks} of \comment{trail
   pixels, shown in blah blah heamap fig?}
 %Fig.~\ref{fig:heatmap}}.
+
+As with the trail quality network described above, all variants of the trail shape network
+start with a Darknet-19 feature-finding front end 
+\cite{<YOLO9000>}.  For the \comment{1-D mask} \comment{need a snappier name for this?} variant,
+the terminal feature maps are followed by 2 fully-connected layers of 1024 units each, with a final
+fully-connected output layer of 320 units (all with ReLU activations).  \comment{this corresponds to the 160 pixel width of the trail ROI, times 2 for the far and near lines, etc.}
+
+\comment{actual details of thresholding output layer to binarize, then biggest connected component
+  with a maximum gap of...3?}
 
 %\comment{used of TensorFlow for some experiments, Darknet for later ones}
 
@@ -767,23 +803,68 @@ want to generalize this to learn \textit{masks} of \comment{trail
 
 \section{RESULTS}
 
-\comment{define terms like IoU.  training/testing splits on various
-  datasets.  ``old'' particle filtering approach with likelihood
-  function: how we ran it on test images and got linear trail
-  segmentations.  IoU metrics: mean/median/min/max.  how fast?}
+\comment{define terms like IoU.  IoU metrics: mean/median/min/max.  how fast?}
 
-For training/testing, the images annotated with trail shape were split 80\%/20\% to get
-1614 training images and 404 test images.
+We used the Darknet-19 library \cite{<Darknet>}, which is GPU-accelerated, for all
+neural network training and testing.  All training started from random
+weights and used a batch size of 128 images unless otherwise noted.
+
+The images annotated with trail shape $\TrailAnnotatedSet$ were split
+80/20 to get 1,614 training images and 404 validation images.  Bad trail
+images $\TrailBadAnnotatedSet$ were similarly split to obtain 2,169
+training images and 542 validation images.
+
+%For non-tracking results, every image was treated independently both during training and testing.
+
+For non-tracking tests of \cite{<FSR2012>}'s ability to classify good
+vs. bad trail images, as well as the accuracy of its trail region
+estimates, the particle filter was reset to its prior distribution on
+each new image and allowed to run for 100 iterations in order to
+converge.  400 particles were used and $k$-means color clustering was
+performed with $k=6$.  \comment{how we went from curved trail region
+  estimate to quadrilateral -- maybe explanatory image?}
+
+% in Lab space only, no EMD, etc.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 \subsection{Trail quality}
 
-\comment{Training set with distortions.  Test set.  Learning rate,
-  number of iterations.  Darknet-19 quality network's percent correct,
-  precision and recall at threshold = 0.5 (not worth showing P-R curve
-  until/unless there are multiple comparisons to make).  Average
-  precision over all thresholds.}
+The base training sets of good and bad trail images were augmented by randomly
+distorting \comment{photometric? geometric? parameters?} each image
+$10\times$ and $6 \times$, respectively, to yield a \textit{trail
+  quality} training set of 29,154 images in which good- and
+bad-labeled images were split roughly 50/50.  The validation set, consisting
+of 946 images, is about 43\% good trail images.  By contrast, about 68\% of the
+809-image trail quality test set are
+good trails.  Training was run for 2500 iterations with a learning rate of 0.01.
+
+%, 2500 iterations (which means what? batch is 128)}
+
+\TrailQualityNet's performance on the validation set is summarized in
+Fig.~\ref{fig:quality_net} by the red precision-recall (P-R) curve
+(average precision (AP) = 0.996), and its performance on the
+test set is shown by the blue curve (AP = 0.885).
+
+For the particle filter method of \cite{<FSR2012>}, the results of
+varying the threshold of the state likelihood used to discriminate
+between good and bad trail images can be seen in
+Fig.~\ref{fig:quality_net}.  The purple P-R curve is
+its result on the trail quality validation set (AP = 0.878), and the green
+curve is its result on the the test set (AP = 0.695).  For the test
+set, no threshold produces a precision more than 10\% above chance.
+
+\comment{figure with a couple of example images, success and/or failure?}
+
+\comment{``confidence'' coming from quality network is pretty saturated -- very close to 1 or 0, with not
+  much in between}
+
+\comment{\cite{<FSR2012>} does not learn, although it was developed
+  using data mostly collected in summer.  Thus, the difference in
+  performance between the validation and test sets would seem to be
+  due to the relatively greater difficulty of the latter.}
+
+\comment{something in the direction of the two other trail papers i am citing?}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -791,8 +872,8 @@ For training/testing, the images annotated with trail shape were split 80\%/20\%
 \captionsetup[subfigure]{labelformat=empty}
 \subfloat[]{%
 %  \centering{\includegraphics[width=0.8\columnwidth]{quality_net_PR_curve.png}}}
-  \centering{\includegraphics[width=1.0\columnwidth]{sep08_bad_trail_pr_curves.png}}}
-\caption{Precision-recall curves on test, validation sets of different methods for assessing whether image contains a trail region or is a \textit{bad trail}}
+  \centering{\includegraphics[width=1.0\columnwidth]{new_bad_trail_pr_curves.png}}}
+\caption{Precision-recall curves on validation, test sets of different methods for assessing whether image contains a \textit{good} trail region or not.}
 \label{fig:quality_net}
 \end{figure}
 
@@ -807,19 +888,24 @@ For training/testing, the images annotated with trail shape were split 80\%/20\%
 %blah blah convolutional front-end attached
 %  through several fully-connected layers to an $(x, y, w, h)$ output
 %  layer.}
-    
+
+\comment{distortions to augment training set} Training was run for 5000 iterations with a learning rate of 0.0001. \comment{Ground truth quadrilateral ``rasterized'', rows at $\TrailFarLine, \TrailNearLine$ concatenated to make 320-vector.  Loss is SSE between this and network output}
+
 \comment{performance of Darknet-19 trail segmentation after training.
   Mean SSD, pixel correctness, IoU metrics.  how fast?}
 
-$\TrailAnnotatedSet$ was divided into train/test with an 80/20 split:
-1,614 training images and 404 test images \comment{what about that one
-  with the trail outside image in sequence?}
+\comment{issue of there being no output units over threshold on $\TrailFarLine$ for a few images, meaning
+  that quadrilateral is undefined and we get 0 IoU}
+
+%$\TrailAnnotatedSet$ was divided into train/test with an 80/20 split:
+%1,614 training images and 404 test images
+\comment{what about that one in $\TrailSeqAnnotatedSet$ with the trail outside image in sequence?  it makes that training set 1,603.}
 
 \comment{class imbalance: 80\% of pixels are background, only 20\% are trail.  looked into this on september 28, 2016 -- weighting false negatives more than false positives in loss function did not help}
 
-\comment{trail masks have no confidence associated with them.  we can use output
-  of trail quality network for this.  need to compare to how
-  i got confidence in \cite{<FSR2012>}}
+%\comment{trail masks have no confidence associated with them.  we can use output
+%  of trail quality network for this.  need to compare to how
+%  i got confidence in \cite{<FSR2012>}}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -831,7 +917,7 @@ $\TrailAnnotatedSet$ was divided into train/test with an 80/20 split:
 \captionsetup[subfigure]{labelformat=empty}
 \subfloat[]{%
   \centering{\includegraphics[width=0.8\columnwidth]{new_SP1_test.png}}}
-\caption{Success plot of \comment{different} trail tracking methods on $\TrailSeqAnnotatedSet^{test}$}
+\caption{Success plot of \comment{different} trail tracking methods on $\TrailSeqAnnotatedSet$ validation set.}
 \label{fig:SP1_test}
 \end{figure}
 
@@ -889,6 +975,9 @@ hand, the robustness measures how many times the tracker loses the target
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 \subsection{Tree detection}
+
+There are 127 images in $\TreeAnnotatedSet$ which belong to $\TrailAnnotatedSet$'s validation set.  These
+contain 278 tree annotations.  \comment{this implies 523 images in $\TreeAnnotatedSet$ which belong to $\TrailAnnotatedSet$'s training set, containing 1162 annotated trees}
 
 \comment{don't make YOLO ``learn'' the orientation of the trees.  we can predict orientation from
   position based on the omnidirectional calibration, or even from the annotation statistics.  why
