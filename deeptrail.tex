@@ -19,8 +19,8 @@
 %\usepackage{epsfig} % for postscript graphics files
 %\usepackage{mathptmx} % assumes new font selection scheme installed
 %\usepackage{times} % assumes new font selection scheme installed
-%\usepackage{amsmath} % assumes amsmath package installed
-%\usepackage{amssymb}  % assumes amsmath package installed
+\usepackage{amsmath} % assumes amsmath package installed
+\usepackage{amssymb}  % assumes amsmath package installed
 
 \usepackage{color}
 \usepackage{graphicx}
@@ -55,10 +55,13 @@
 \newcommand{\TrailSeqAnnotatedSet}{\mathtt{trainval}_{trail-30}}
 \newcommand{\TreeAnnotatedSet}{\mathtt{trainval}_{tree}}
 
-\newcommand{\TrailQualityNet}{Darknet-19}
-%\newcommand{\Trail1DMaskNet}{Darknet-19}
-%\newcommand{\Trail2DMaskNet}{Darknet-19}
-%\newcommand{\TrailRegressionNet}{Darknet-19}
+\newcommand{\TrailQualityNet}{\mathtt{D19}_{bad\_trail}}
+%\newcommand{\TrailOneDMaskNet}{\mathtt{D19}_{1D\_masks}}
+\newcommand{\TrailOneDMaskNet}{\mathtt{D19}_{\mathit{1D\_masks}}}
+\newcommand{\TrailRegressionNet}{\mathtt{D19}_{\mathit{regression}}}
+%\newcommand{\BoldTrailOneDMaskNet}{\mathtt{D19}_{\mathit{1D\_masks}}}
+%\newcommand{\BoldTrailRegressionNet}{\mathtt{D19}_{\mathit{regression}}}
+\newcommand{\TrailTwoDMaskNet}{\mathtt{D19}_{2D\_mask}}
 
 % all of the TE sets are test
 \newcommand{\TrailTestAnnotatedSet}{\mathtt{test}_{trail}}
@@ -690,10 +693,10 @@ thresholding the likelihood of the trail tracker state, as this
 represents the ``quality'' of the current trail estimate.  This
 estimate is nominally optimal, so if the tracker cannot find a
 high-valued state, the system may infer that there is no clear trail
-in the image.  Here, we use the labeled data to train a \textit{trail
-  quality} neural network 2-category classifier to recognize bad trail
-images.
+in the image.
 
+Here, we use the labeled data to train a \textit{trail quality} neural network 2-category
+classifier to recognize bad trail images.
 Specifically, the color trail ROI is resized to $160 \times 80$ and
 input to a resized Darknet-19 convolutional neural network
 \cite{<YOLO9000>}, which is used as a feature-finding front end.  This
@@ -701,6 +704,7 @@ module terminates with 1,024 $5 \times 2$ feature maps.  This is
 followed by a $1 \times 1$ convolutional layer with 2 filters and linear activations.  Each
 of the 2 resulting feature maps is average-pooled, then a softmax
 function is applied to obtain the final 2-unit output layer.
+This network will be called $\TrailQualityNet$.
 
 %When
 %this likelihood drops below a threshold, the robot stops and a ladar
@@ -723,24 +727,15 @@ is a highly non-linear and difficult-to-learn mapping
 \cite{<JointCNN>,<FlowingConvNets>}.  Furthermore, there is the
 question of how to enforce $x^{L}_{*} < x^{R}_{*}$.  At the opposite
 end of the spectrum, training the network to classify each pixel as
-part of the trail or part of the background may be an easier task, but
+either part of the trail or part of the background may be an easier task, but
 underconstrained--and non-trivial post-processing must be done on this
 output \textit{trail mask} to obtain the quadrilateral vertices.
-
-\comment{more explanation of heatmap concept--cite torr paper for more complex shapes. then...our method is hybrid--heatmap + constraints}
 
 Rather, we use an idea similar to
 \cite{<FlowingConvNets>}, which labels joint locations in images of
 people, and train the network to output a \comment{blah blah
   ``heatmap'', where high-value pixels belong to the trail and
   low-value pixels to the background.}
-
-%In this case the output layer would be the same size as the input layer
-%($160 \times 80$)
-
-%Using a simplified version of VGG-16 \cite{<VGG2015>} as the front end,
-%we were successful \comment{numbers?}, but various comparisons showed
-%that the mask approach works better.
 
 In \cite{<FlowingConvNets>}, at training time each ground truth joint
 position is indicated by a fixed-variance Gaussian (each joint has a
@@ -751,14 +746,40 @@ want to generalize this to learn \textit{masks} of \comment{trail
   pixels, shown in blah blah heamap fig?}
 %Fig.~\ref{fig:heatmap}}.
 
-As with the trail quality network described above, all variants of the trail shape network
-start with a Darknet-19 feature-finding front end 
-\cite{<YOLO9000>}.  For the \comment{1-D mask} \comment{need a snappier name for this?} variant,
-the terminal feature maps are followed by 2 fully-connected layers of 1024 units each, with a final
-fully-connected output layer of 320 units (all with ReLU activations).  \comment{this corresponds to the 160 pixel width of the trail ROI, times 2 for the far and near lines, etc.}
+\comment{more explanation of heatmap/mask concept--cite torr paper for more complex shapes.}
+  
+Below, we outline several variants along this continuum, all of which
+start with the Darknet-19 feature-finding front end 
+\cite{<YOLO9000>} used in the trail quality network described above.
+
+\paragraph{$\TrailRegressionNet$} The Darknet-19 terminal feature maps are followed by 2 fully-connected
+layers of 1,024 units each, then a fully-connected 4-unit output layer (all with linear activations).
+The output layer's units are interpreted directly as the trail quadrilateral vertices
+$(\hat{x}^{L}_{far}, \hat{x}^{R}_{far}, \hat{x}^{L}_{near}, \hat{x}^{R}_{near})$.  \comment{loss is just SSE?}
+
+\paragraph{$\TrailOneDMaskNet$} The Darknet-19 terminal feature maps are again followed by 2 fully-connected
+layers of 1,024 units each, but now the final fully-connected output
+layer has 320 units, and these layers all have ReLU activations.
+Consider a \textit{trail mask} image with the same dimensions as the
+trail ROI \comment{picture to illustrate?}.  The first 160 units of
+the output layer are predictions of the pixels of the trail mask image
+along the $\TrailFarLine$ row, and the final 160 units predict the
+mask's pixels along $\TrailNearLine$.
+
+\comment{this method is hybrid--heatmap + constraints}
 
 \comment{actual details of thresholding output layer to binarize, then biggest connected component
-  with a maximum gap of...3?}
+  with a maximum gap?}
+
+\comment{Ground truth quadrilateral ``rasterized'', rows at $\TrailFarLine, \TrailNearLine$ concatenated to make 320-vector.  Loss is SSE between this and network output}
+
+%In this case the output layer would be the same size as the input layer
+%($160 \times 80$)
+
+%Using a simplified version of VGG-16 \cite{<VGG2015>} as the front end,
+%we were successful \comment{numbers?}, but various comparisons showed
+%that the mask approach works better.
+
 
 %\comment{used of TensorFlow for some experiments, Darknet for later ones}
 
@@ -803,13 +824,11 @@ fully-connected output layer of 320 units (all with ReLU activations).  \comment
 
 \section{RESULTS}
 
-\comment{define terms like IoU.  IoU metrics: mean/median/min/max.  how fast?}
-
 We used the Darknet-19 library \cite{<Darknet>}, which is GPU-accelerated, for all
 neural network training and testing.  All training started from random
 weights and used a batch size of 128 images unless otherwise noted.
 
-The images annotated with trail shape $\TrailAnnotatedSet$ were split
+The images annotated with trail shape $\TrailAnnotatedSet$ were randomly split
 80/20 to get 1,614 training images and 404 validation images.  Bad trail
 images $\TrailBadAnnotatedSet$ were similarly split to obtain 2,169
 training images and 542 validation images.
@@ -821,8 +840,7 @@ vs. bad trail images, as well as the accuracy of its trail region
 estimates, the particle filter was reset to its prior distribution on
 each new image and allowed to run for 100 iterations in order to
 converge.  400 particles were used and $k$-means color clustering was
-performed with $k=6$.  \comment{how we went from curved trail region
-  estimate to quadrilateral -- maybe explanatory image?}
+performed with $k=6$.  
 
 % in Lab space only, no EMD, etc.
 
@@ -838,31 +856,33 @@ bad-labeled images were split roughly 50/50.  The validation set, consisting
 of 946 images, is about 43\% good trail images.  By contrast, about 68\% of the
 809-image trail quality test set are
 good trails.  Training was run for 2500 iterations with a learning rate of 0.01.
+No image in the validation set or test set was distorted.
 
 %, 2500 iterations (which means what? batch is 128)}
 
-\TrailQualityNet's performance on the validation set is summarized in
-Fig.~\ref{fig:quality_net} by the red precision-recall (P-R) curve
-(average precision (AP) = 0.996), and its performance on the
-test set is shown by the blue curve (AP = 0.885).
+The performance of $\TrailQualityNet$ 
+is summarized in Fig.~\ref{fig:quality_results}, with the precision-recall
+(P-R) curve for the validation set drawn in red (average precision
+(AP) = 0.996), and the P-R curve on the test set drawn in blue (AP =
+0.885). \comment{qualitative comments?}
 
 For the particle filter method of \cite{<FSR2012>}, the results of
 varying the threshold of the state likelihood used to discriminate
 between good and bad trail images can be seen in
-Fig.~\ref{fig:quality_net}.  The purple P-R curve is
+Fig.~\ref{fig:quality_results}.  The purple P-R curve is
 its result on the trail quality validation set (AP = 0.878), and the green
-curve is its result on the the test set (AP = 0.695).  For the test
+curve is its result on the test set (AP = 0.695).  For the test
 set, no threshold produces a precision more than 10\% above chance.
-
-\comment{figure with a couple of example images, success and/or failure?}
-
-\comment{``confidence'' coming from quality network is pretty saturated -- very close to 1 or 0, with not
-  much in between}
 
 \comment{\cite{<FSR2012>} does not learn, although it was developed
   using data mostly collected in summer.  Thus, the difference in
   performance between the validation and test sets would seem to be
   due to the relatively greater difficulty of the latter.}
+
+\comment{figure with a couple of example images, success and/or failure?}
+
+\comment{``confidence'' coming from quality network is pretty saturated -- very close to 1 or 0, with not
+  much in between}
 
 \comment{something in the direction of the two other trail papers i am citing?}
 
@@ -874,7 +894,7 @@ set, no threshold produces a precision more than 10\% above chance.
 %  \centering{\includegraphics[width=0.8\columnwidth]{quality_net_PR_curve.png}}}
   \centering{\includegraphics[width=1.0\columnwidth]{new_bad_trail_pr_curves.png}}}
 \caption{Precision-recall curves on validation, test sets of different methods for assessing whether image contains a \textit{good} trail region or not.}
-\label{fig:quality_net}
+\label{fig:quality_results}
 \end{figure}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -889,17 +909,65 @@ set, no threshold produces a precision more than 10\% above chance.
 %  through several fully-connected layers to an $(x, y, w, h)$ output
 %  layer.}
 
-\comment{distortions to augment training set} Training was run for 5000 iterations with a learning rate of 0.0001. \comment{Ground truth quadrilateral ``rasterized'', rows at $\TrailFarLine, \TrailNearLine$ concatenated to make 320-vector.  Loss is SSE between this and network output}
+The accuracy of any predicted trail quadrilateral was assessed by
+computing the intersection over union (IoU) between it and the ground
+truth quadrilateral, with IoUs $\geq 0.5$ considered ``correct''
+segmentations.
 
-\comment{performance of Darknet-19 trail segmentation after training.
-  Mean SSD, pixel correctness, IoU metrics.  how fast?}
+The base training set of trail shape images was augmented by randomly
+distorting both photometrically and geometrically
+\comment{parameters?} each image $10\times$ yield a \textit{trail
+  shape} training set of 16,140 images.  Any geometric distortion
+which resulted in a particular trail becoming \textit{bad} was regenerated.
 
-\comment{issue of there being no output units over threshold on $\TrailFarLine$ for a few images, meaning
-  that quadrilateral is undefined and we get 0 IoU}
+$\TrailOneDMaskNet$ was trained for 5000 iterations with a learning
+rate of 0.0001 (batch size 128).  At test time, the output layer was
+binarized with a threshold of 0.5 and a maximum gap of 3 to obtain the
+trail quadrilateral vertices.  Note that for a few images this resulted in no
+pixels on $\TrailFarLine$ having a value of 1, so $\hat{x}^{L}_{far}$
+and $\hat{x}^{R}_{far}$ could not be inferred.  In these cases, an IoU
+of 0 was assigned.
+
+\cite{<FSR2012>}'s trail segmentation method outputs a polygon,
+possibly curved, over a slightly larger depth range.  In order to
+compute the IoU more fairly, the intersections of this polygon with
+$\TrailFarLine$ and $\TrailNearLine$ are used to define the estimated
+trail quadrilateral.  \comment{explanatory image?}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\begin{table}
+  \begin{center}
+  \begin{tabular}{ |c|c c|c c| }
+    \hline
+    & \multicolumn{2}{|c|}{\textit{Validation}} & \multicolumn{2}{|c|}{\textit{Test}} \\
+ %      & cell8 & cell9 & cell2 & cell3 \\ 
+ %\hline
+                        & \begin{tabular}{@{}c@{}}Median\\IoU\end{tabular} & \begin{tabular}{@{}c@{}}\%\\correct\end{tabular}  & \begin{tabular}{@{}c@{}}Median\\IoU\end{tabular} & \begin{tabular}{@{}c@{}}\%\\correct\end{tabular} \\
+%   & Median IoU & \% correct & Median IoU & \% correct \\
+ \hline
+  $\TrailOneDMaskNet$    & \textbf{0.880} & 0.988          & \textbf{0.777} & \textbf{0.926} \\ 
+  $\TrailRegressionNet$  & 0.835          & \textbf{0.993} & 0.738          & 0.902 \\ 
+ \cite{<FSR2012>}        & 0.819          & 0.879          & 0.695          & 0.857 \\ 
+ \hline
+\end{tabular}
+  \end{center}
+  \caption{Trail segmentation results on images with shape annotations}
+  \label{tab:shape_results}
+  \end{table}
+  
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+Trail shape segmentation results are summarized in Tab.~\ref{tab:shape_results}.
+  
+\comment{say something about speed}
+
+\comment{image gallery.  maybe columns are methods (including GT), rows are different images, some good, some bad from validation and test.  also thought about histogram of IoUs}
+
+%\comment{performance of Darknet-19 trail segmentation after training.
+%  Report mean SSD, pixel correctness?}
 
 %$\TrailAnnotatedSet$ was divided into train/test with an 80/20 split:
 %1,614 training images and 404 test images
-\comment{what about that one in $\TrailSeqAnnotatedSet$ with the trail outside image in sequence?  it makes that training set 1,603.}
 
 \comment{class imbalance: 80\% of pixels are background, only 20\% are trail.  looked into this on september 28, 2016 -- weighting false negatives more than false positives in loss function did not help}
 
@@ -922,6 +990,8 @@ set, no threshold produces a precision more than 10\% above chance.
 \end{figure}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\comment{what about that one in $\TrailSeqAnnotatedSet$ with the trail outside image in sequence?  it makes that training set 1,603.}
 
 \comment{use standard tracking metric (AUC of success plot?) for both methods on test sequences}
 
